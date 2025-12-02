@@ -1,0 +1,359 @@
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Helmet } from 'react-helmet';
+import { motion } from 'framer-motion';
+import { getPlans, createPlan, updatePlan, deletePlan } from '@/api/plans';
+import { getCategories } from '@/api/categories';
+import { useToast } from '@/hooks/use-toast';
+import { Package, Plus, Trash2, Edit2, Save, X, Server } from 'lucide-react';
+import ParticleBackground from '@/components/ParticleBackground';
+
+const AdminPlansPage = () => {
+    const navigate = useNavigate();
+    const { toast } = useToast();
+    const [plans, setPlans] = useState([]);
+    const [categories, setCategories] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [isEditing, setIsEditing] = useState(false);
+    const [currentPlan, setCurrentPlan] = useState(null);
+
+    const [formData, setFormData] = useState({
+        name: '',
+        type: 'bot',
+        processor: '',
+        categoryId: '',
+        price: '',
+        features: '',
+        isActive: 1
+    });
+
+    useEffect(() => {
+        loadData();
+    }, []);
+
+    const loadData = async () => {
+        try {
+            const [plansData, categoriesData] = await Promise.all([
+                getPlans(),
+                getCategories('vps')
+            ]);
+            setPlans(plansData);
+            setCategories(categoriesData);
+        } catch (error) {
+            toast({
+                title: 'Error',
+                description: 'Failed to load data',
+                variant: 'destructive'
+            });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleInputChange = (e) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({
+            ...prev,
+            [name]: value
+        }));
+    };
+
+    const resetForm = () => {
+        setFormData({
+            name: '',
+            type: 'bot',
+            processor: '',
+            categoryId: '',
+            price: '',
+            features: '',
+            isActive: 1
+        });
+        setIsEditing(false);
+        setCurrentPlan(null);
+    };
+
+    const handleEdit = (plan) => {
+        setIsEditing(true);
+        setCurrentPlan(plan);
+        setFormData({
+            name: plan.name,
+            type: plan.type,
+            processor: plan.processor || '',
+            categoryId: plan.categoryId || '',
+            price: plan.price,
+            features: plan.features.join('\n'),
+            isActive: plan.isActive
+        });
+    };
+
+    const handleDelete = async (id) => {
+        if (!window.confirm('Are you sure you want to delete this plan?')) return;
+
+        try {
+            await deletePlan(id);
+            toast({
+                title: 'Success',
+                description: 'Plan deleted successfully'
+            });
+            loadData();
+        } catch (error) {
+            toast({
+                title: 'Error',
+                description: 'Failed to delete plan',
+                variant: 'destructive'
+            });
+        }
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+
+        try {
+            const planData = {
+                ...formData,
+                price: parseFloat(formData.price),
+                features: formData.features.split('\n').filter(f => f.trim() !== ''),
+                isActive: parseInt(formData.isActive),
+                categoryId: formData.categoryId ? parseInt(formData.categoryId) : null
+            };
+
+            if (isEditing) {
+                await updatePlan(currentPlan.id, planData);
+                toast({ title: 'Success', description: 'Plan updated successfully' });
+            } else {
+                await createPlan(planData);
+                toast({ title: 'Success', description: 'Plan created successfully' });
+            }
+
+            resetForm();
+            loadData();
+        } catch (error) {
+            toast({
+                title: 'Error',
+                description: error.response?.data?.error || (isEditing ? 'Failed to update plan' : 'Failed to create plan'),
+                variant: 'destructive'
+            });
+        }
+    };
+
+    return (
+        <>
+            <Helmet>
+                <title>Manage Plans - Admin</title>
+            </Helmet>
+            <ParticleBackground />
+            <div className="min-h-screen px-4 py-12">
+                <div className="container mx-auto max-w-6xl">
+                    <div className="flex justify-between items-center mb-8">
+                        <div>
+                            <h1 className="text-3xl font-bold text-white mb-2">Manage Plans</h1>
+                            <p className="text-gray-400">Add, edit, or remove hosting plans</p>
+                        </div>
+                        <button
+                            onClick={() => navigate('/admin/dashboard')}
+                            className="text-gray-400 hover:text-white transition-colors"
+                        >
+                            Back to Dashboard
+                        </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        <div className="lg:col-span-1">
+                            <motion.div
+                                initial={{ opacity: 0, x: -20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                className="bg-black/50 backdrop-blur-xl border border-white/10 rounded-2xl p-6 sticky top-8"
+                            >
+                                <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+                                    {isEditing ? <Edit2 size={20} /> : <Plus size={20} />}
+                                    {isEditing ? 'Edit Plan' : 'Add New Plan'}
+                                </h2>
+
+                                <form onSubmit={handleSubmit} className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-400 mb-1">Plan Name</label>
+                                        <input
+                                            type="text"
+                                            name="name"
+                                            value={formData.name}
+                                            onChange={handleInputChange}
+                                            required
+                                            className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                                            placeholder="e.g. VPS Pro"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-400 mb-1">Type</label>
+                                        <select
+                                            name="type"
+                                            value={formData.type}
+                                            onChange={handleInputChange}
+                                            className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                                        >
+                                            <option value="bot">Bot Hosting</option>
+                                            <option value="vps">VPS Hosting</option>
+                                        </select>
+                                    </div>
+
+                                    {formData.type === 'vps' && (
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-400 mb-1">Category</label>
+                                            <select
+                                                name="categoryId"
+                                                value={formData.categoryId}
+                                                onChange={handleInputChange}
+                                                className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                                            >
+                                                <option value="">No Category (Use Processor Filter)</option>
+
+                                                {/* Dynamic categories from database */}
+                                                {categories.map((category) => (
+                                                    <option key={category.id} value={category.id}>
+                                                        {category.name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            <p className="text-xs text-gray-500 mt-1">
+                                                Select a custom category or leave empty for processor-based filtering
+                                            </p>
+                                        </div>
+                                    )}
+
+                                    {formData.type === 'vps' && (
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-400 mb-1">Processor (Optional)</label>
+                                            <input
+                                                type="text"
+                                                name="processor"
+                                                value={formData.processor}
+                                                onChange={handleInputChange}
+                                                className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                                                placeholder="e.g. Intel Xeon E5-2680v4"
+                                            />
+                                            <p className="text-xs text-gray-500 mt-1">
+                                                Displayed under plan name. Use "Intel Xeon", "Intel Platinum", or "AMD Ryzen" for processor tabs
+                                            </p>
+                                        </div>
+                                    )}
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-400 mb-1">Price (₹)</label>
+                                        <input
+                                            type="number"
+                                            name="price"
+                                            value={formData.price}
+                                            onChange={handleInputChange}
+                                            required
+                                            className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                                            placeholder="e.g. 999"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-400 mb-1">Features (One per line)</label>
+                                        <textarea
+                                            name="features"
+                                            value={formData.features}
+                                            onChange={handleInputChange}
+                                            required
+                                            rows="5"
+                                            className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                                            placeholder="4 GB RAM&#10;100 GB Storage&#10;..."
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-400 mb-1">Status</label>
+                                        <select
+                                            name="isActive"
+                                            value={formData.isActive}
+                                            onChange={handleInputChange}
+                                            className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+                                        >
+                                            <option value={1}>Active (In Stock)</option>
+                                            <option value={0}>Inactive (Out of Stock)</option>
+                                        </select>
+                                    </div>
+
+                                    <div className="flex gap-3 pt-4">
+                                        <button
+                                            type="submit"
+                                            className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
+                                        >
+                                            <Save size={18} />
+                                            {isEditing ? 'Update Plan' : 'Create Plan'}
+                                        </button>
+                                        {isEditing && (
+                                            <button
+                                                type="button"
+                                                onClick={resetForm}
+                                                className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors"
+                                            >
+                                                <X size={18} />
+                                            </button>
+                                        )}
+                                    </div>
+                                </form>
+                            </motion.div>
+                        </div>
+
+                        <div className="lg:col-span-2">
+                            <div className="grid grid-cols-1 gap-4">
+                                {loading ? (
+                                    <div className="text-center py-12 text-gray-400">Loading plans...</div>
+                                ) : plans.length === 0 ? (
+                                    <div className="text-center py-12 text-gray-400">No plans found. Create one!</div>
+                                ) : (
+                                    plans.map((plan) => (
+                                        <motion.div
+                                            key={plan.id}
+                                            initial={{ opacity: 0, y: 10 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            className={`bg-black/50 backdrop-blur-xl border ${plan.isActive ? 'border-white/10' : 'border-red-500/30'} rounded-xl p-6 flex justify-between items-center`}
+                                        >
+                                            <div>
+                                                <div className="flex items-center gap-3 mb-1">
+                                                    <h3 className="text-xl font-bold text-white">{plan.name}</h3>
+                                                    <span className={`px-2 py-0.5 rounded text-xs ${plan.type === 'bot' ? 'bg-purple-500/20 text-purple-300' : 'bg-blue-500/20 text-blue-300'}`}>
+                                                        {plan.type === 'bot' ? 'Bot Hosting' : 'VPS'}
+                                                    </span>
+                                                    {!plan.isActive && (
+                                                        <span className="px-2 py-0.5 rounded text-xs bg-red-500/20 text-red-300">
+                                                            Out of Stock
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <p className="text-gray-400 text-sm mb-2">{plan.processor || 'Standard CPU'}</p>
+                                                <p className="text-2xl font-bold text-white">₹{plan.price}</p>
+                                            </div>
+
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => handleEdit(plan)}
+                                                    className="p-2 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 transition-colors"
+                                                    title="Edit"
+                                                >
+                                                    <Edit2 size={18} />
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDelete(plan.id)}
+                                                    className="p-2 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors"
+                                                    title="Delete"
+                                                >
+                                                    <Trash2 size={18} />
+                                                </button>
+                                            </div>
+                                        </motion.div>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </>
+    );
+};
+
+export default AdminPlansPage;
